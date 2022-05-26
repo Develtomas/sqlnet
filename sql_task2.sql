@@ -54,6 +54,35 @@ except
 --минус билеты прошедшие регистрацию
 select ticket_no from cte
 
+--5
+select 
+	tab1.flight_id,
+	count "occupied seats", 
+	total - count "empty seats",--
+	round((total - count)::numeric*100/total) "empty seats~%",
+	departure_airport,
+	actual_departure::date,
+	--оконная с суммой занятых мест, группировка по аэропорту и дате. Сортировка - чтобы реализовать накопительный итог
+	sum(count) over (partition by departure_airport, actual_departure::date order by actual_departure) "passengers left"
+from (
+	--кол-во мест, тех кто прошел регистрацию
+	select flight_id, count(seat_no) from boarding_passes bp
+	group by flight_id
+) as tab1
+join (
+	--
+	select departure_airport, flight_id, total, actual_departure  from flights f 
+	--вместительность join flight_id
+	join (
+		--вместительность самолетов
+		select aircraft_code, count(seat_no) total from seats s
+		group by aircraft_code) as ts
+	on f.aircraft_code = ts.aircraft_code
+	--находим только улетевшие, для статистике по сумме убывших из аэропорта
+	where actual_departure is not null
+) as tab2
+on tab1.flight_id = tab2.flight_id
+
 --6
 --Join таблиц flights - aircrafts, после находим процент. Из-за округления процент скачет 99~101
 select 
@@ -79,11 +108,14 @@ join bookings.flights_v fv  on b.flight_id = fv.flight_id
 
 --8
 --декартово произведение с исключением повторов
-select distinct  r.departure_city, r2.arrival_city  from routes r, routes r2
-where r.departure_city > r2.arrival_city 
-except 
---минус все рейсы с исключением повторов
-select distinct  departure_city, arrival_city from routes
-where departure_city > arrival_city 
+create view no_direct_flights as (
+	select distinct  r.departure_city, r2.arrival_city  from routes r, routes r2
+	where r.departure_city > r2.arrival_city 
+	except 
+	--минус все рейсы с исключением повторов
+	select distinct  departure_city, arrival_city from routes
+	where departure_city > arrival_city
+)
+select concat_ws(' - ', departure_city, arrival_city) "no direct" from no_direct_flights ndf 
 
 
