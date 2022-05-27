@@ -118,4 +118,32 @@ create view no_direct_flights as (
 )
 select concat_ws(' - ', departure_city, arrival_city) "no direct" from no_direct_flights ndf 
 
-
+--9
+select 
+	route,
+	distance,
+	"range",
+	--безопасна ли дистанция для самолета
+	case
+		when "range" > distance then 'Y'
+		else 'N'
+	end "safe distance"
+from (
+	select 
+		--названия аэропортов
+		concat_ws(' -> ', departure_airport_name, arrival_airport_name) route,
+		--формула из приложения
+		round(6371*acos(sin(radians(dep.latitude))*sin(radians(arv.latitude)) 
+		+ cos(radians(dep.latitude))*cos(radians(arv.latitude))*cos(radians(dep.longitude) - radians(arv.longitude)))) distance,
+		aircraft_code
+	from (
+		--находим уникальные маршруты
+		select distinct  departure_airport, arrival_airport, departure_airport_name , arrival_airport_name, aircraft_code from routes
+		where departure_city > arrival_city
+	) as tab1
+	--координаты точек отправления и прибытия
+	join airports dep on tab1.departure_airport = dep.airport_code
+	join airports arv on tab1.arrival_airport = arv.airport_code
+) as tab2 
+--макс. дистанция для самолета.
+join aircrafts a on tab2.aircraft_code = a.aircraft_code
